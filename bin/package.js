@@ -11,6 +11,8 @@ var _glob = _interopRequireDefault(require("glob"));
 
 var _path = _interopRequireDefault(require("path"));
 
+var _fs = _interopRequireDefault(require("fs"));
+
 var _rimraf = _interopRequireDefault(require("rimraf"));
 
 var _util = require("util");
@@ -22,11 +24,13 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 const tar = require("tar");
 
 const execAsync = (0, _util.promisify)(_child_process.exec);
+let packageJson;
 
 var _default = async argv => {
   const modulePath = _path.default.resolve(argv.path || process.cwd());
 
   const out = argv.out;
+  packageJson = require(_path.default.join(modulePath, "package.json"));
 
   try {
     await installProductionDeps(modulePath);
@@ -53,13 +57,37 @@ const getTargetOSConfig = () => {
 };
 
 async function installProductionDeps(modulePath) {
-  (0, _log.debug)("Installing production modules...");
-  const {
-    stdout
-  } = await execAsync(`cross-env npm_config_target_platform=${getTargetOSConfig()} && mv node_modules node_modules_temp && npm ci --production --no-package-lock && mv node_modules node_production_modules && mv node_modules_temp node_modules`, {
-    cwd: modulePath
-  });
-  (0, _log.debug)(stdout);
+  if (packageJson.dependencies) {
+    (0, _log.debug)("Installing production modules...");
+
+    const nodeModules = _path.default.join(modulePath, "node_modules");
+
+    const nodeTempModules = _path.default.join(modulePath, "node_temp_modules");
+
+    const nodeProductionModules = _path.default.join(modulePath, "node_production_modules");
+
+    await execAsync(`cross-env npm_config_target_platform=${getTargetOSConfig()}`, {
+      cwd: modulePath
+    });
+
+    _fs.default.renameSync(nodeModules, nodeTempModules);
+
+    const {
+      stdout
+    } = await execAsync(`npm ci --production --no-package-lock`, {
+      cwd: modulePath
+    });
+
+    _fs.default.renameSync(nodeModules, nodeProductionModules);
+
+    _fs.default.renameSync(nodeTempModules, nodeModules);
+
+    (0, _log.debug)(stdout);
+  } else {
+    (0, _log.debug)("No production modules found, creating empty node_production_modules folder...");
+
+    _fs.default.mkdirSync(_path.default.join(modulePath, "node_production_modules"));
+  }
 }
 
 async function cleanup(modulePath) {
@@ -69,8 +97,6 @@ async function cleanup(modulePath) {
 }
 
 async function zipFiles(modulePath, outPath) {
-  const packageJson = require(_path.default.join(modulePath, "package.json"));
-
   outPath = outPath.replace(/%name%/gi, packageJson.name.replace(/[^\w-]/gi, "_"));
   outPath = outPath.replace(/%version%/gi, packageJson.version.replace(/[^\w-]/gi, "_"));
 
