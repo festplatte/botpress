@@ -1,76 +1,88 @@
-import { exec } from 'child_process'
-import glob from 'glob'
-import path from 'path'
-import rimraf from 'rimraf'
-import { promisify } from 'util'
+import { exec } from "child_process";
+import glob from "glob";
+import path from "path";
+import rimraf from "rimraf";
+import { promisify } from "util";
 
-import { debug, error, normal } from './log'
+import { debug, error, normal } from "./log";
 
-const tar = require('tar')
+const tar = require("tar");
 
-const execAsync = promisify(exec)
+const execAsync = promisify(exec);
 
 export default async (argv: any) => {
-  const modulePath = path.resolve(argv.path || process.cwd())
-  const out = argv.out
+  const modulePath = path.resolve(argv.path || process.cwd());
+  const out = argv.out;
 
   try {
-    await installProductionDeps(modulePath)
-    await zipFiles(modulePath, out)
+    await installProductionDeps(modulePath);
+    await zipFiles(modulePath, out);
   } catch (err) {
-    return error(`Error packaging module: ${err.message || ''} ${err.cmd || ''} ${err.stderr || ''}`)
+    return error(
+      `Error packaging module: ${err.message || ""} ${err.cmd ||
+        ""} ${err.stderr || ""}`
+    );
   } finally {
-    await cleanup(modulePath)
+    await cleanup(modulePath);
   }
 
-  normal('Package completed')
-}
+  normal("Package completed");
+};
 
 const getTargetOSConfig = () => {
-  if (process.argv.find(x => x.toLowerCase() === '--win32')) {
-    return 'win32'
-  } else if (process.argv.find(x => x.toLowerCase() === '--linux')) {
-    return 'linux'
+  if (process.argv.find(x => x.toLowerCase() === "--win32")) {
+    return "win32";
+  } else if (process.argv.find(x => x.toLowerCase() === "--linux")) {
+    return "linux";
   } else {
-    return 'darwin'
+    return "darwin";
   }
-}
+};
 
 async function installProductionDeps(modulePath) {
-  debug('Installing production modules...')
+  debug("Installing production modules...");
   const { stdout } = await execAsync(
-    `cross-env npm_config_target_platform=${getTargetOSConfig()} yarn install --modules-folder node_production_modules --production --no-lockfile --ignore-scripts --force`,
+    `cross-env npm_config_target_platform=${getTargetOSConfig()} && mv node_modules node_modules_temp && npm ci --production --no-package-lock && mv node_modules node_production_modules && mv node_modules_temp node_modules`,
     {
       cwd: modulePath
     }
-  )
-  debug(stdout)
+  );
+  debug(stdout);
 }
 
 async function cleanup(modulePath) {
-  debug('Cleaning up temporary files...')
-  rimraf.sync(path.join(modulePath, 'node_production_modules'))
+  debug("Cleaning up temporary files...");
+  rimraf.sync(path.join(modulePath, "node_production_modules"));
 }
 
 async function zipFiles(modulePath, outPath) {
-  const packageJson = require(path.join(modulePath, 'package.json'))
-  outPath = outPath.replace(/%name%/gi, packageJson.name.replace(/[^\w-]/gi, '_'))
-  outPath = outPath.replace(/%version%/gi, packageJson.version.replace(/[^\w-]/gi, '_'))
+  const packageJson = require(path.join(modulePath, "package.json"));
+  outPath = outPath.replace(
+    /%name%/gi,
+    packageJson.name.replace(/[^\w-]/gi, "_")
+  );
+  outPath = outPath.replace(
+    /%version%/gi,
+    packageJson.version.replace(/[^\w-]/gi, "_")
+  );
 
   if (!path.isAbsolute(outPath)) {
-    outPath = path.join(modulePath, outPath)
+    outPath = path.join(modulePath, outPath);
   }
 
-  debug(`Writing to "${outPath}"`)
+  debug(`Writing to "${outPath}"`);
 
-  const files = glob.sync('**/*', {
+  const files = glob.sync("**/*", {
     cwd: modulePath,
     nodir: true,
     dot: true,
-    ignore: ['node_modules/**', 'src/**']
-  })
+    ignore: ["node_modules/**", "src/**"]
+  });
 
-  debug(`Zipping ${files.length} file${files.length === 1 ? '' : 's'}...`)
+  debug(`Zipping ${files.length} file${files.length === 1 ? "" : "s"}...`);
 
-  await tar.create({ gzip: true, follow: true, file: outPath, portable: true }, files)
+  await tar.create(
+    { gzip: true, follow: true, file: outPath, portable: true },
+    files
+  );
 }
