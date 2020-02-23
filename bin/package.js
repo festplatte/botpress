@@ -59,29 +59,11 @@ const getTargetOSConfig = () => {
 async function installProductionDeps(modulePath) {
   if (packageJson.dependencies) {
     (0, _log.debug)("Installing production modules...");
-
-    const nodeModules = _path.default.join(modulePath, "node_modules");
-
-    const nodeTempModules = _path.default.join(modulePath, "node_temp_modules");
-
-    const nodeProductionModules = _path.default.join(modulePath, "node_production_modules");
-
-    await execAsync(`cross-env npm_config_target_platform=${getTargetOSConfig()}`, {
-      cwd: modulePath
-    });
-
-    _fs.default.renameSync(nodeModules, nodeTempModules);
-
     const {
       stdout
-    } = await execAsync(`npm ci --production --no-package-lock`, {
+    } = await execAsync(`cross-env npm_config_target_platform=${getTargetOSConfig()} && mv node_modules node_modules_temp && npm ci --production && mv node_modules node_production_modules && mv node_modules_temp node_modules`, {
       cwd: modulePath
     });
-
-    _fs.default.renameSync(nodeModules, nodeProductionModules);
-
-    _fs.default.renameSync(nodeTempModules, nodeModules);
-
     (0, _log.debug)(stdout);
   } else {
     (0, _log.debug)("No production modules found, creating empty node_production_modules folder...");

@@ -46,27 +46,12 @@ const getTargetOSConfig = () => {
 async function installProductionDeps(modulePath) {
   if (packageJson.dependencies) {
     debug("Installing production modules...");
-    const nodeModules = path.join(modulePath, "node_modules");
-    const nodeTempModules = path.join(modulePath, "node_temp_modules");
-    const nodeProductionModules = path.join(
-      modulePath,
-      "node_production_modules"
-    );
-    await execAsync(
-      `cross-env npm_config_target_platform=${getTargetOSConfig()}`,
-      {
-        cwd: modulePath
-      }
-    );
-    fs.renameSync(nodeModules, nodeTempModules);
     const { stdout } = await execAsync(
-      `npm ci --production --no-package-lock`,
+      `cross-env npm_config_target_platform=${getTargetOSConfig()} && mv node_modules node_modules_temp && npm ci --production && mv node_modules node_production_modules && mv node_modules_temp node_modules`,
       {
         cwd: modulePath
       }
     );
-    fs.renameSync(nodeModules, nodeProductionModules);
-    fs.renameSync(nodeTempModules, nodeModules);
     debug(stdout);
   } else {
     debug(
